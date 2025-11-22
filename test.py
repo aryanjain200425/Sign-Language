@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -7,6 +8,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
+# -------------------------------------------------
+# Make output directory for images
+# -------------------------------------------------
+os.makedirs("outputs", exist_ok=True)
 
 # -------------------------------------------------
 # Dataset class
@@ -28,7 +33,6 @@ class SignLanguageMNIST(Dataset):
             img = self.transform(img)
         return img, label
 
-
 # -------------------------------------------------
 # Transform
 # -------------------------------------------------
@@ -41,7 +45,6 @@ transform = transforms.Compose([
 # Load test set
 test_dataset = SignLanguageMNIST("./data/sign_mnist_test.csv", transform=transform)
 test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
-
 
 # -------------------------------------------------
 # CNN Model (must match train.py)
@@ -67,7 +70,6 @@ class CNN(nn.Module):
         x = self.fc2(x)
         return x
 
-
 # -------------------------------------------------
 # Load Model
 # -------------------------------------------------
@@ -77,7 +79,6 @@ model.load_state_dict(torch.load("sign_model.pt", map_location=device))
 model.eval()
 
 print("\nModel Loaded: sign_model.pt\n")
-
 
 # -------------------------------------------------
 # Evaluate Model
@@ -103,19 +104,19 @@ with torch.no_grad():
 accuracy = 100 * correct / total
 print(f"Test Accuracy: {accuracy:.2f}%")
 
-
 # -------------------------------------------------
-# Confusion Matrix
+# Confusion Matrix (SAVE + SHOW)
 # -------------------------------------------------
 cm = confusion_matrix(all_labels, all_preds)
 disp = ConfusionMatrixDisplay(cm)
 disp.plot(cmap="Blues", xticks_rotation="vertical")
 plt.title("Confusion Matrix")
+plt.tight_layout()
+plt.savefig("outputs/confusion_matrix.png", dpi=300, bbox_inches="tight")
 plt.show()
 
-
 # -------------------------------------------------
-# Show 12 Predictions
+# Show 12 Predictions (SAVE + SHOW)
 # -------------------------------------------------
 import random
 fig, axes = plt.subplots(3, 4, figsize=(12, 9))
@@ -128,8 +129,14 @@ for ax in axes.flatten():
         output = model(img.unsqueeze(0).to(device))
         pred = torch.argmax(output).item()
 
-    ax.imshow(img.squeeze(), cmap="gray")
+    # Undo normalization for proper display: from [-1,1] back to [0,1]
+    img_vis = img * 0.5 + 0.5
+    img_vis = img_vis.squeeze().numpy()
+
+    ax.imshow(img_vis, cmap="gray")
     ax.set_title(f"True: {true_label} | Pred: {pred}")
     ax.axis("off")
 
+plt.tight_layout()
+fig.savefig("outputs/sample_predictions.png", dpi=300, bbox_inches="tight")
 plt.show()
