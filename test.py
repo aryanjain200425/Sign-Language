@@ -107,13 +107,41 @@ print(f"Test Accuracy: {accuracy:.2f}%")
 # -------------------------------------------------
 # Confusion Matrix (SAVE + SHOW)
 # -------------------------------------------------
+# cm = confusion_matrix(all_labels, all_preds)
+# disp = ConfusionMatrixDisplay(cm)
+# disp.plot(cmap="Blues", xticks_rotation="vertical")
+# plt.title("Confusion Matrix")
+# plt.tight_layout()
+# plt.savefig("outputs/confusion_matrix.png", dpi=300, bbox_inches="tight")
+# plt.show()
+
+# -------------------------------------------------
+# Confusion Matrix (SAVE + SHOW)
+# -------------------------------------------------
 cm = confusion_matrix(all_labels, all_preds)
+
+fig, ax = plt.subplots(figsize=(10, 10))   # <-- bigger figure
 disp = ConfusionMatrixDisplay(cm)
-disp.plot(cmap="Blues", xticks_rotation="vertical")
+
+disp.plot(
+    cmap="Blues",
+    xticks_rotation="vertical",
+    ax=ax,
+    values_format='d'                      # <-- show integers
+)
+
+# make the text smaller so it fits in each cell
+for txt in disp.text_.ravel():
+    txt.set_fontsize(6)                   # try 5–8 and see what you like
+
 plt.title("Confusion Matrix")
 plt.tight_layout()
-plt.savefig("outputs/confusion_matrix.png", dpi=300, bbox_inches="tight")
+plt.savefig("outputs/confusion_matrix.png", dpi=300)
 plt.show()
+
+
+
+
 
 # -------------------------------------------------
 # Show 12 Predictions (SAVE + SHOW)
