@@ -7,9 +7,10 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import classification_report  # <-- NEW
 
 # -------------------------------------------------
-# Make output directory for images
+# Make output directory for images/reports
 # -------------------------------------------------
 os.makedirs("outputs", exist_ok=True)
 
@@ -28,7 +29,7 @@ class SignLanguageMNIST(Dataset):
 
     def __getitem__(self, idx):
         img = self.images[idx]
-        label = self.labels[idx]
+        label = int(self.labels[idx])
         if self.transform:
             img = self.transform(img)
         return img, label
@@ -71,6 +72,27 @@ class CNN(nn.Module):
         return x
 
 # -------------------------------------------------
+# Helper: class id -> letter names
+# -------------------------------------------------
+def make_class_names(num_classes: int):
+    """
+    Tries to produce reasonable letter labels.
+    - 26 -> A-Z
+    - 25 -> A-Y
+    - 24 -> A-I, K-Y (common Sign Language MNIST convention: J omitted)
+    Otherwise -> Class 0..N-1
+    """
+    alphabet = [chr(ord('A') + i) for i in range(26)]
+    if num_classes == 26:
+        return alphabet
+    if num_classes == 25:
+        return alphabet[:25]  # A..Y
+    if num_classes == 24:
+        # Common Kaggle Sign Language MNIST: J omitted (dynamic gesture)
+        return alphabet[:9] + alphabet[10:25]  # A..I + K..Y
+    return [f"Class {i}" for i in range(num_classes)]
+
+# -------------------------------------------------
 # Load Model
 # -------------------------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -79,6 +101,9 @@ model.load_state_dict(torch.load("sign_model.pt", map_location=device))
 model.eval()
 
 print("\nModel Loaded: sign_model.pt\n")
+
+num_classes = model.fc2.out_features
+class_names = make_class_names(num_classes)
 
 # -------------------------------------------------
 # Evaluate Model
@@ -92,59 +117,75 @@ with torch.no_grad():
     for images, labels in test_loader:
         images, labels = images.to(device), labels.to(device)
         outputs = model(images)
-
-        _, predicted = torch.max(outputs.data, 1)
+        predicted = torch.argmax(outputs, dim=1)
 
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
 
-        all_preds.extend(predicted.cpu().numpy())
-        all_labels.extend(labels.cpu().numpy())
+        all_preds.extend(predicted.cpu().numpy().tolist())
+        all_labels.extend(labels.cpu().numpy().tolist())
 
 accuracy = 100 * correct / total
-print(f"Test Accuracy: {accuracy:.2f}%")
+print(f"Test Accuracy: {accuracy:.2f}%\n")
 
 # -------------------------------------------------
-# Confusion Matrix (SAVE + SHOW)
+# Per-class Precision/Recall/F1 (PRINT + SAVE CSV)
 # -------------------------------------------------
-# cm = confusion_matrix(all_labels, all_preds)
-# disp = ConfusionMatrixDisplay(cm)
-# disp.plot(cmap="Blues", xticks_rotation="vertical")
-# plt.title("Confusion Matrix")
-# plt.tight_layout()
-# plt.savefig("outputs/confusion_matrix.png", dpi=300, bbox_inches="tight")
-# plt.show()
+# Force the report to include every class 0..num_classes-1 even if some don't appear
+labels_order = list(range(num_classes))
+
+report_dict = classification_report(
+    all_labels,
+    all_preds,
+    labels=labels_order,
+    target_names=class_names,
+    output_dict=True,
+    digits=4,
+    zero_division=0
+)
+
+# Pretty print
+report_text = classification_report(
+    all_labels,
+    all_preds,
+    labels=labels_order,
+    target_names=class_names,
+    digits=4,
+    zero_division=0
+)
+print("Per-class metrics (Precision / Recall / F1):")
+print(report_text)
+
+# Save to CSV
+df_report = pd.DataFrame(report_dict).T
+df_report.to_csv("outputs/per_class_metrics.csv", index=True)
+print("Saved: outputs/per_class_metrics.csv\n")
 
 # -------------------------------------------------
-# Confusion Matrix (SAVE + SHOW)
+# Confusion Matrix (SAVE + SHOW) with letter labels
 # -------------------------------------------------
-cm = confusion_matrix(all_labels, all_preds)
+cm = confusion_matrix(all_labels, all_preds, labels=labels_order)
 
-fig, ax = plt.subplots(figsize=(10, 10))   # <-- bigger figure
-disp = ConfusionMatrixDisplay(cm)
+fig, ax = plt.subplots(figsize=(10, 10))
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
 
 disp.plot(
     cmap="Blues",
     xticks_rotation="vertical",
     ax=ax,
-    values_format='d'                      # <-- show integers
+    values_format='d'
 )
 
-# make the text smaller so it fits in each cell
 for txt in disp.text_.ravel():
-    txt.set_fontsize(6)                   # try 5–8 and see what you like
+    txt.set_fontsize(6)
 
 plt.title("Confusion Matrix")
 plt.tight_layout()
 plt.savefig("outputs/confusion_matrix.png", dpi=300)
 plt.show()
 
-
-
-
-
 # -------------------------------------------------
-# Show 12 Predictions (SAVE + SHOW)
+# Show 12 Predictions (SAVE + SHOW) with letter labels
 # -------------------------------------------------
 import random
 fig, axes = plt.subplots(3, 4, figsize=(12, 9))
@@ -157,12 +198,14 @@ for ax in axes.flatten():
         output = model(img.unsqueeze(0).to(device))
         pred = torch.argmax(output).item()
 
-    # Undo normalization for proper display: from [-1,1] back to [0,1]
     img_vis = img * 0.5 + 0.5
     img_vis = img_vis.squeeze().numpy()
 
+    true_name = class_names[true_label] if 0 <= true_label < len(class_names) else str(true_label)
+    pred_name = class_names[pred] if 0 <= pred < len(class_names) else str(pred)
+
     ax.imshow(img_vis, cmap="gray")
-    ax.set_title(f"True: {true_label} | Pred: {pred}")
+    ax.set_title(f"True: {true_name} | Pred: {pred_name}")
     ax.axis("off")
 
 plt.tight_layout()
