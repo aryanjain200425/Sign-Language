@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import argparse
+from vit_model import ViT
 
 
 # -------------------------------------------------
@@ -84,15 +86,24 @@ class CNN(nn.Module):
 
 
 # -------------------------------------------------
+# Args
+# -------------------------------------------------
+parser = argparse.ArgumentParser()
+parser.add_argument('--model', choices=['cnn','vit'], default='cnn', help='Model type to train')
+parser.add_argument('--epochs', type=int, default=10)
+parser.add_argument('--lr', type=float, default=0.001)
+args = parser.parse_args()
+
+# -------------------------------------------------
 # Train Model
 # -------------------------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = CNN().to(device)
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+model = CNN().to(device) if args.model == 'cnn' else ViT(img_size=28, patch_size=4, in_chans=1, num_classes=25).to(device)
+optimizer = optim.Adam(model.parameters(), lr=args.lr)
 criterion = nn.CrossEntropyLoss()
 
-epochs = 10
-print("Training started...\n")
+epochs = args.epochs
+print(f"Training started with {args.model.upper()}...\n")
 
 # Create output directory if it doesn't exist
 os.makedirs("outputs", exist_ok=True)
@@ -160,7 +171,7 @@ for epoch in range(epochs):
     if val_acc > best_val_acc:
         best_val_acc = val_acc
         best_epoch = epoch + 1
-        torch.save(model.state_dict(), "sign_model_best.pt")
+        torch.save(model.state_dict(), f"sign_model_best_{args.model}.pt")
     
     print(f"Epoch {epoch+1}/{epochs} | Train Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.2f}% | Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2f}%")
 
@@ -169,9 +180,9 @@ print(f"\nBest validation accuracy: {best_val_acc:.2f}% at epoch {best_epoch}")
 # -------------------------------------------------
 # Save Final Model
 # -------------------------------------------------
-torch.save(model.state_dict(), "sign_model.pt")
-print("Final model saved to sign_model.pt")
-print(f"Best model saved to sign_model_best.pt")
+torch.save(model.state_dict(), f"sign_model_{args.model}.pt")
+print(f"Final model saved to sign_model_{args.model}.pt")
+print(f"Best model saved to sign_model_best_{args.model}.pt")
 
 # -------------------------------------------------
 # Plot Training Curves
@@ -200,8 +211,8 @@ ax2.legend(fontsize=10)
 ax2.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('outputs/training_curves.png', dpi=300, bbox_inches='tight')
-print("\nTraining curves saved to outputs/training_curves.png")
+plt.savefig(f'outputs/training_curves_{args.model}.png', dpi=300, bbox_inches='tight')
+print(f"\nTraining curves saved to outputs/training_curves_{args.model}.png")
 
 # -------------------------------------------------
 # Save Metrics to CSV
@@ -213,7 +224,7 @@ metrics_df = pd.DataFrame({
     'Val_Loss': val_losses,
     'Val_Accuracy': val_accuracies
 })
-metrics_df.to_csv('outputs/training_metrics.csv', index=False)
-print("Training metrics saved to outputs/training_metrics.csv")
+metrics_df.to_csv(f'outputs/training_metrics_{args.model}.csv', index=False)
+print(f"Training metrics saved to outputs/training_metrics_{args.model}.csv")
 
 plt.show()

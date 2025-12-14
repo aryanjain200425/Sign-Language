@@ -1,2 +1,4 @@
 /sign-env
-/data
+/datadata/
+__pycache__/
+*.pt

@@ -8,6 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import classification_report  # <-- NEW
+import argparse
+from vit_model import ViT
 
 # -------------------------------------------------
 # Make output directory for images/reports
@@ -46,6 +48,13 @@ transform = transforms.Compose([
 # Load test set
 test_dataset = SignLanguageMNIST("./data/sign_mnist_test.csv", transform=transform)
 test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+
+# -------------------------------------------------
+# Args: select model type
+# -------------------------------------------------
+parser = argparse.ArgumentParser()
+parser.add_argument('--model', choices=['cnn','vit'], default='cnn')
+args = parser.parse_args()
 
 # -------------------------------------------------
 # CNN Model (must match train.py)
@@ -96,13 +105,19 @@ def make_class_names(num_classes: int):
 # Load Model
 # -------------------------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = CNN().to(device)
-model.load_state_dict(torch.load("sign_model.pt", map_location=device))
+model = CNN().to(device) if args.model == 'cnn' else ViT(img_size=28, patch_size=4, in_chans=1, num_classes=25).to(device)
+model_path = f"sign_model_{args.model}.pt"
+if not os.path.exists(model_path):
+    model_path = "sign_model.pt"
+model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval()
 
-print("\nModel Loaded: sign_model.pt\n")
+print(f"\nModel Loaded: {model_path}\n")
 
-num_classes = model.fc2.out_features
+if hasattr(model, "fc2"):
+    num_classes = model.fc2.out_features
+else:
+    num_classes = model.head.out_features
 class_names = make_class_names(num_classes)
 
 # -------------------------------------------------
